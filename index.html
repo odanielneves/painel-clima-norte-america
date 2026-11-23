@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel de Clima — América do Norte</title>
+<style>
+:root{--bg:#0f1419;--panel:#18212a;--line:#2a3643;--fg:#e8edf2;--muted:#8b9aa9;--warm:#ff7a59;--cold:#4da3ff;--ok:#5fd38d;--accent:#4da3ff}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:0 max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+header{padding:20px 0 8px}
+h1{font-size:20px;margin:0 0 4px;font-weight:600}
+.sub{color:var(--muted);font-size:12px}
+main{display:grid;gap:16px;padding-top:12px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:6px 12px;cursor:pointer;font:inherit}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--accent)}
+.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
+.kpi .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.kpi .val{font-size:26px;font-weight:600;margin-top:6px;font-variant-numeric:tabular-nums}
+.kpi .hint{color:var(--muted);font-size:12px;margin-top:2px}
+.up{color:var(--warm)}
+.down{color:var(--cold)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
+.panel h2{font-size:13px;margin:0 0 10px;color:var(--muted);font-weight:500}
+.grid2{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:900px){.grid2{grid-template-columns:1.3fr 1fr}}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}
+th{color:var(--muted);font-weight:500;font-size:12px}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
+.snow{background:#243a52;color:#9fd0ff}
+.clear{background:#213528;color:var(--ok)}
+.err{color:var(--muted);font-style:italic}
+.bars{display:grid;gap:6px}
+.bar-row{display:grid;grid-template-columns:130px 1fr 64px;align-items:center;gap:8px;font-size:12px}
+.bar-row span.v{text-align:right;font-variant-numeric:tabular-nums}
+.track{position:relative;height:14px;background:#121a22;border-radius:3px}
+.track::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)}
+.bar{position:absolute;top:0;bottom:0;border-radius:3px}
+.empty{color:var(--muted);padding:32px 12px;text-align:center}
+footer{color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Clima na América do Norte</h1>
+  <div class="sub" id="meta">Carregando dados…</div>
+</header>
+
+<main>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+
+  <section class="kpis" id="kpis"></section>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>Últimos 7 dias vs. mesmo período do ano passado</h2>
+      <div class="wrap"><table id="tabela"></table></div>
+    </section>
+    <section class="panel">
+      <h2>Diferença da máxima (°C) por cidade</h2>
+      <div class="bars" id="barras"></div>
+    </section>
+  </div>
+
+  <footer>
+    Fonte: Open-Meteo (dados públicos, sem chave). Atualizado automaticamente a cada hora.
+    A comparação usa a média dos últimos 7 dias completos (UTC).
+  </footer>
+</main>
+
+<script>
+const TABS = [
+  { id: "todos", label: "América do Norte", key: "america_do_norte", filter: () => true },
+  { id: "eua", label: "EUA", key: "eua", filter: c => c.pais === "EUA" },
+  { id: "canada", label: "Canadá", key: "canada", filter: c => c.pais === "Canadá" },
+  { id: "mexico", label: "México", key: "mexico", filter: c => c.pais === "México" },
+  { id: "snowbelt", label: "Snowbelt", key: "snowbelt", filter: c => c.regiao === "Snowbelt" },
+  { id: "sunbelt", label: "Sunbelt", key: "sunbelt", filter: c => c.regiao === "Sunbelt" },
+];
+
+let DATA = null;
+let ATUAL = "todos";
+
+const $ = id => document.getElementById(id);
+
+function el(tag, text, cls) {
+  const node = document.createElement(tag);
+  if (text != null) node.textContent = text;
+  if (cls) node.className = cls;
+  return node;
+}
+
+function num(v, d = 1) {
+  return v == null ? "—" : v.toFixed(d);
+}
+
+function signed(v) {
+  if (v == null) return "—";
+  return (v > 0 ? "+" : "") + v.toFixed(1) + " °C";
+}
+
+function deltaClass(v) {
+  if (v == null || v === 0) return "";
+  return v > 0 ? "up" : "down";
+}
+
+function arrow(v) {
+  if (v == null || v === 0) return "";
+  return v > 0 ? "▲ " : "▼ ";
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function renderTabs() {
+  const nav = $("tabs");
+  nav.replaceChildren();
+  for (const t of TABS) {
+    const b = el("button", t.label);
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(t.id === ATUAL));
+    b.addEventListener("click", () => { ATUAL = t.id; render(); });
+    nav.appendChild(b);
+  }
+}
+
+function renderKpis(g) {
+  const k = $("kpis");
+  k.replaceChildren();
+  const cards = [
+    { label: "Nevando agora", val: `${g.neve ?? 0} de ${g.n ?? 0}`, hint: "cidades com neve" },
+    { label: "Máxima média (atual)", val: num(g.tmax_atual) + " °C", hint: "últimos 7 dias" },
+    { label: "Δ máxima vs. ano passado", val: signed(g.dmax), hint: "média de 7 dias", cls: deltaClass(g.dmax) },
+    { label: "Δ mínima vs. ano passado", val: signed(g.dmin), hint: "média de 7 dias", cls: deltaClass(g.dmin) },
+  ];
+  for (const c of cards) {
+    const card = el("div", null, "kpi");
+    card.append(el("div", c.label, "label"));
+    card.append(el("div", (c.cls ? arrow(c.cls === "up" ? 1 : -1) : "") + c.val, "val " + (c.cls || "")));
+    card.append(el("div", c.hint, "hint"));
+    k.appendChild(card);
+  }
+}
+
+function renderTable(rows) {
+  const t = $("tabela");
+  t.replaceChildren();
+  const head = el("tr");
+  ["Cidade", "País", "Região", "Neve agora", "Máx. atual", "Máx. ano passado", "Δ máx.", "Mín. atual", "Mín. ano passado", "Δ mín."]
+    .forEach(h => head.appendChild(el("th", h)));
+  t.appendChild(el("thead")).appendChild(head);
+  const body = el("tbody");
+  for (const c of rows) {
+    const tr = el("tr");
+    tr.appendChild(el("td", c.nome));
+    tr.appendChild(el("td", c.pais));
+    tr.appendChild(el("td", c.regiao));
+    const td = el("td");
+    if (!c.ok) {
+      td.appendChild(el("span", "indisponível", "err"));
+    } else {
+      td.appendChild(el("span", c.neve ? "Nevando" : "Sem neve", "pill " + (c.neve ? "snow" : "clear")));
+    }
+    tr.appendChild(td);
+    if (!c.ok) {
+      tr.appendChild(el("td", "—"));
+      tr.appendChild(el("td", "—"));
+      tr.appendChild(el("td", "—"));
+      tr.appendChild(el("td", "—"));
+      tr.appendChild(el("td", "—"));
+      tr.appendChild(el("td", "—"));
+    } else {
+      tr.appendChild(el("td", num(c.tmax_atual) + " °C"));
+      tr.appendChild(el("td", num(c.tmax_ano_passado) + " °C"));
+      tr.appendChild(el("td", arrow(c.dmax) + signed(c.dmax), deltaClass(c.dmax)));
+      tr.appendChild(el("td", num(c.tmin_atual) + " °C"));
+      tr.appendChild(el("td", num(c.tmin_ano_passado) + " °C"));
+      tr.appendChild(el("td", arrow(c.dmin) + signed(c.dmin), deltaClass(c.dmin)));
+    }
+    body.appendChild(tr);
+  }
+  t.appendChild(body);
+}
+
+function renderBars(rows) {
+  const box = $("barras");
+  box.replaceChildren();
+  const validos = rows.filter(c => c.ok && c.dmax != null)
+    .sort((a, b) => b.dmax - a.dmax);
+  if (!validos.length) {
+    box.appendChild(el("div", "Sem dados para esta seleção.", "empty"));
+    return;
+  }
+  const max = Math.max(...validos.map(c => Math.abs(c.dmax)), 1);
+  for (const c of validos) {
+    const row = el("div", null, "bar-row");
+    row.appendChild(el("span", c.nome));
+    const track = el("div", null, "track");
+    const bar = el("div", null, "bar");
+    const w = (Math.abs(c.dmax) / max) * 50;
+    bar.style.width = w + "%";
+    bar.style.left = c.dmax < 0 ? (50 - w) + "%" : "50%";
+    bar.style.background = c.dmax >= 0 ? "var(--warm)" : "var(--cold)";
+    track.appendChild(bar);
+    row.appendChild(track);
+    row.appendChild(el("span", signed(c.dmax), "v " + deltaClass(c.dmax)));
+    box.appendChild(row);
+  }
+}
+
+function render() {
+  renderTabs();
+  if (!DATA) return;
+  const tab = TABS.find(t => t.id === ATUAL);
+  const rows = DATA.cidades.filter(tab.filter);
+  renderKpis(DATA.grupos[tab.key] || {});
+  renderTable(rows);
+  renderBars(rows);
+}
+
+async function load() {
+  try {
+    const res = await fetch("data/latest.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    DATA = await res.json();
+    $("meta").textContent =
+      `Atualizado em ${formatDate(DATA.gerado_em)} (horário de Brasília) · ` +
+      `Janela atual: ${DATA.janela.atual[0]} a ${DATA.janela.atual[1]} · ` +
+      `Comparação: ${DATA.janela.ano_passado[0]} a ${DATA.janela.ano_passado[1]}`;
+    render();
+  } catch (e) {
+    $("meta").textContent = "Ainda não há dados. A primeira coleta roda na próxima hora cheia.";
+    $("kpis").replaceChildren();
+    $("tabela").replaceChildren();
+    $("barras").replaceChildren(el("div", "Aguardando a primeira atualização.", "empty"));
+    renderTabs();
+  }
+}
+
+load();
+</script>
+</body>
+</html>
