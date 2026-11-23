@@ -8,15 +8,16 @@
 :root{--bg:#0f1419;--panel:#18212a;--line:#2a3643;--fg:#e8edf2;--muted:#8b9aa9;--warm:#ff7a59;--cold:#4da3ff;--ok:#5fd38d;--accent:#4da3ff}
 *{box-sizing:border-box}
 html,body{background:var(--bg)}
-body{margin:0;color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:0 max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+body{margin:0;color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-block:0 40px;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px))}
 header{padding:20px 0 8px}
 h1{font-size:20px;margin:0 0 4px;font-weight:600}
 .sub{color:var(--muted);font-size:12px}
 main{display:grid;gap:16px;padding-top:12px}
-.tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tabs button{background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:6px 12px;cursor:pointer;font:inherit}
-.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--accent)}
-.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.group{display:flex;gap:6px;flex-wrap:wrap}
+.group button{background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:6px 12px;cursor:pointer;font:inherit}
+.group button[aria-pressed="true"]{color:var(--fg);border-color:var(--accent)}
+button:focus-visible,tr[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
 .kpi .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
@@ -27,23 +28,23 @@ main{display:grid;gap:16px;padding-top:12px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
 .panel h2{font-size:13px;margin:0 0 10px;color:var(--muted);font-weight:500}
 .grid2{display:grid;grid-template-columns:1fr;gap:16px}
-@media(min-width:900px){.grid2{grid-template-columns:1.3fr 1fr}}
+@media(min-width:900px){.grid2{grid-template-columns:1fr 1fr}}
 .wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
 th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}
 th{color:var(--muted);font-weight:500;font-size:12px}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#1d2834}
+tbody tr.sel{background:#1f2b38}
 .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
 .snow{background:#243a52;color:#9fd0ff}
 .clear{background:#213528;color:var(--ok)}
 .err{color:var(--muted);font-style:italic}
-.bars{display:grid;gap:6px}
-.bar-row{display:grid;grid-template-columns:130px 1fr 64px;align-items:center;gap:8px;font-size:12px}
-.bar-row span.v{text-align:right;font-variant-numeric:tabular-nums}
-.track{position:relative;height:14px;background:#121a22;border-radius:3px}
-.track::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)}
-.bar{position:absolute;top:0;bottom:0;border-radius:3px}
-.empty{color:var(--muted);padding:32px 12px;text-align:center}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:18px;height:0;border-top:2px solid;vertical-align:middle;margin-right:6px}
+.chart svg{width:100%;height:auto;display:block}
+.empty{color:var(--muted);padding:24px 12px;text-align:center}
 footer{color:var(--muted);font-size:12px;margin-top:8px}
 </style>
 </head>
@@ -54,39 +55,67 @@ footer{color:var(--muted);font-size:12px;margin-top:8px}
 </header>
 
 <main>
-  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <section class="bar">
+    <div class="group" id="periodos" role="group" aria-label="Período"></div>
+    <div class="group" id="metricas" role="group" aria-label="Métrica do gráfico"></div>
+  </section>
+
+  <section class="bar">
+    <div class="group" id="regioes" role="group" aria-label="Recorte"></div>
+  </section>
 
   <section class="kpis" id="kpis"></section>
 
   <div class="grid2">
     <section class="panel">
-      <h2>Últimos 7 dias vs. mesmo período do ano passado</h2>
-      <div class="wrap"><table id="tabela"></table></div>
+      <h2>Estados e províncias</h2>
+      <div class="wrap"><table id="estados"></table></div>
     </section>
     <section class="panel">
-      <h2>Diferença da máxima (°C) por cidade</h2>
-      <div class="bars" id="barras"></div>
+      <h2 id="tituloTendencia">Tendência diária</h2>
+      <div class="legend" id="legenda"></div>
+      <div class="chart" id="grafico"></div>
     </section>
   </div>
 
+  <section class="panel" id="paineCidades">
+    <h2 id="tituloCidades">Cidades</h2>
+    <div class="wrap"><table id="cidades"></table></div>
+  </section>
+
   <footer>
-    Fonte: Open-Meteo (dados públicos, sem chave). Atualizado automaticamente a cada hora.
-    A comparação usa a média dos últimos 7 dias completos (UTC).
+    Fonte: Open-Meteo (dados públicos, sem chave). Atualização automática a cada hora.
+    Estados e províncias são a média das cidades monitoradas em cada um. Temperatura em °C.
   </footer>
 </main>
 
 <script>
-const TABS = [
-  { id: "todos", label: "América do Norte", key: "america_do_norte", filter: () => true },
-  { id: "eua", label: "EUA", key: "eua", filter: c => c.pais === "EUA" },
-  { id: "canada", label: "Canadá", key: "canada", filter: c => c.pais === "Canadá" },
-  { id: "mexico", label: "México", key: "mexico", filter: c => c.pais === "México" },
-  { id: "snowbelt", label: "Snowbelt", key: "snowbelt", filter: c => c.regiao === "Snowbelt" },
-  { id: "sunbelt", label: "Sunbelt", key: "sunbelt", filter: c => c.regiao === "Sunbelt" },
+const NS = "http://www.w3.org/2000/svg";
+const PERIODOS = [
+  { id: "7d", label: "Últimos 7 dias" },
+  { id: "quinzena", label: "Quinzena atual" },
+  { id: "mes", label: "Mês atual" },
+];
+const METRICAS = [
+  { id: "tmax", label: "Máxima" },
+  { id: "tmin", label: "Mínima" },
+];
+const RECORTES = [
+  { id: "todos", label: "América do Norte", filter: () => true },
+  { id: "eua", label: "EUA", filter: s => s.pais === "EUA" },
+  { id: "canada", label: "Canadá", filter: s => s.pais === "Canadá" },
+  { id: "mexico", label: "México", filter: s => s.pais === "México" },
+  { id: "snowbelt", label: "Snowbelt", filter: s => s.regiao === "Snowbelt" },
+  { id: "sunbelt", label: "Sunbelt", filter: s => s.regiao === "Sunbelt" },
 ];
 
 let DATA = null;
-let ATUAL = "todos";
+let STATES = [];
+let PERIODO = "7d";
+let METRICA = "tmax";
+let RECORTE = "todos";
+let ESTADO = null; // chave "pais|estado" ou null para a região toda
+let JANELA = null;
 
 const $ = id => document.getElementById(id);
 
@@ -97,137 +126,295 @@ function el(tag, text, cls) {
   return node;
 }
 
-function num(v, d = 1) {
-  return v == null ? "—" : v.toFixed(d);
+// ---------- datas ----------
+const DIA = 864e5;
+const parseD = s => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+const addDays = (dt, n) => new Date(dt.getTime() + n * DIA);
+const isoD = dt => dt.toISOString().slice(0, 10);
+const dm = dt => String(dt.getUTCDate()).padStart(2, "0") + "/" + String(dt.getUTCMonth() + 1).padStart(2, "0");
+function shiftYear(dt, n) {
+  const y = dt.getUTCFullYear() + n, m = dt.getUTCMonth(), d = dt.getUTCDate();
+  const r = new Date(Date.UTC(y, m, d));
+  return r.getUTCMonth() !== m ? new Date(Date.UTC(y, m + 1, 0)) : r; // 29/02 em ano sem bissexto
 }
 
-function signed(v) {
-  if (v == null) return "—";
-  return (v > 0 ? "+" : "") + v.toFixed(1) + " °C";
+// ---------- janelas de comparação ----------
+function janela() {
+  const ref = parseD(DATA.ultimo_dia); // último dia completo
+  const y = ref.getUTCFullYear(), m = ref.getUTCMonth();
+  let s, e;
+  if (PERIODO === "7d") {
+    s = addDays(ref, -6); e = ref;
+  } else if (PERIODO === "quinzena") {
+    if (ref.getUTCDate() <= 15) { s = new Date(Date.UTC(y, m, 1)); e = new Date(Date.UTC(y, m, 15)); }
+    else { s = new Date(Date.UTC(y, m, 16)); e = new Date(Date.UTC(y, m + 1, 0)); }
+  } else {
+    s = new Date(Date.UTC(y, m, 1)); e = ref;
+  }
+  if (e > ref) e = ref;
+  const n = Math.round((e - s) / DIA) + 1;
+  const ls = shiftYear(s, -1), le = addDays(ls, n - 1);
+  const base = parseD(DATA.dias[0]);
+  const idx = dt => Math.round((dt - base) / DIA);
+  return {
+    n, s, e, ls, le,
+    ti: idx(s), li: idx(ls),
+    rotulo: `${dm(s)} a ${dm(e)}`,
+    rotuloLY: `${dm(ls)} a ${dm(le)}`,
+  };
 }
 
-function deltaClass(v) {
-  if (v == null || v === 0) return "";
-  return v > 0 ? "up" : "down";
+// ---------- estatísticas ----------
+const avg = a => {
+  const v = a.filter(x => x != null);
+  return v.length ? v.reduce((p, c) => p + c, 0) / v.length : null;
+};
+const dayMean = (cities, m, i) => avg(cities.map(c => c[m][i]));
+function seriesOf(cities, m, start, n) {
+  const out = [];
+  for (let k = 0; k < n; k++) out.push(dayMean(cities, m, start + k));
+  return out;
+}
+const periodMean = (cities, m, start, n) => avg(seriesOf(cities, m, start, n));
+const deltaOf = (a, b) => (a == null || b == null) ? null : Math.round((a - b) * 10) / 10;
+
+function statsFor(cities) {
+  const ok = cities.filter(c => c.ok);
+  const r = { n: ok.length, neve: ok.filter(c => c.neve).length };
+  for (const m of ["tmax", "tmin"]) {
+    r[m + "TY"] = periodMean(ok, m, JANELA.ti, JANELA.n);
+    r[m + "LY"] = periodMean(ok, m, JANELA.li, JANELA.n);
+    r["d" + m] = deltaOf(r[m + "TY"], r[m + "LY"]);
+  }
+  return r;
 }
 
-function arrow(v) {
-  if (v == null || v === 0) return "";
-  return v > 0 ? "▲ " : "▼ ";
-}
+// ---------- formatação ----------
+const num = v => v == null ? "—" : v.toFixed(1);
+const signed = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + " °C";
+const cls = v => v == null || v === 0 ? "" : v > 0 ? "up" : "down";
+const arrow = v => v == null || v === 0 ? "" : v > 0 ? "▲ " : "▼ ";
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit", month: "2-digit", year: "numeric",
+    timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
 }
 
-function renderTabs() {
-  const nav = $("tabs");
-  nav.replaceChildren();
-  for (const t of TABS) {
-    const b = el("button", t.label);
-    b.setAttribute("role", "tab");
-    b.setAttribute("aria-selected", String(t.id === ATUAL));
-    b.addEventListener("click", () => { ATUAL = t.id; render(); });
-    nav.appendChild(b);
+// ---------- estados ----------
+function buildStates(cities) {
+  const map = new Map();
+  for (const c of cities) {
+    const key = c.pais + "|" + c.estado;
+    if (!map.has(key)) map.set(key, { key, pais: c.pais, estado: c.estado, regiao: c.regiao, cidades: [] });
+    map.get(key).cidades.push(c);
   }
+  return [...map.values()];
 }
 
-function renderKpis(g) {
+// ---------- renderização ----------
+function renderControls() {
+  const grupo = (id, itens, atual, onClick) => {
+    const box = $(id);
+    box.replaceChildren();
+    for (const it of itens) {
+      const b = el("button", it.label);
+      b.setAttribute("aria-pressed", String(it.id === atual));
+      b.addEventListener("click", () => onClick(it.id));
+      box.appendChild(b);
+    }
+  };
+  grupo("periodos", PERIODOS, PERIODO, id => { PERIODO = id; JANELA = janela(); render(); });
+  grupo("metricas", METRICAS, METRICA, id => { METRICA = id; render(); });
+  grupo("regioes", RECORTES, RECORTE, id => { RECORTE = id; ESTADO = null; render(); });
+}
+
+function scopeCities() {
+  if (ESTADO) return STATES.find(s => s.key === ESTADO)?.cidades ?? [];
+  return DATA.cidades;
+}
+
+function renderKpis() {
+  const cities = scopeCities();
+  const st = statsFor(cities);
   const k = $("kpis");
   k.replaceChildren();
   const cards = [
-    { label: "Nevando agora", val: `${g.neve ?? 0} de ${g.n ?? 0}`, hint: "cidades com neve" },
-    { label: "Máxima média (atual)", val: num(g.tmax_atual) + " °C", hint: "últimos 7 dias" },
-    { label: "Δ máxima vs. ano passado", val: signed(g.dmax), hint: "média de 7 dias", cls: deltaClass(g.dmax) },
-    { label: "Δ mínima vs. ano passado", val: signed(g.dmin), hint: "média de 7 dias", cls: deltaClass(g.dmin) },
+    { label: "Nevando agora", val: `${st.neve} de ${st.n}`, hint: "cidades monitoradas" },
+    { label: "Máxima média (período)", val: num(st.tmaxTY) + " °C", hint: `${JANELA.rotulo}` },
+    { label: "Δ máxima vs. ano passado", val: signed(st.dtmax), hint: "média do período", c: cls(st.dtmax) },
+    { label: "Δ mínima vs. ano passado", val: signed(st.dtmin), hint: "média do período", c: cls(st.dtmin) },
   ];
   for (const c of cards) {
     const card = el("div", null, "kpi");
     card.append(el("div", c.label, "label"));
-    card.append(el("div", (c.cls ? arrow(c.cls === "up" ? 1 : -1) : "") + c.val, "val " + (c.cls || "")));
+    card.append(el("div", (c.c ? arrow(c.c === "up" ? 1 : -1) : "") + c.val, "val " + (c.c || "")));
     card.append(el("div", c.hint, "hint"));
     k.appendChild(card);
   }
 }
 
-function renderTable(rows) {
-  const t = $("tabela");
+function renderEstados() {
+  const t = $("estados");
   t.replaceChildren();
   const head = el("tr");
-  ["Cidade", "País", "Região", "Neve agora", "Máx. atual", "Máx. ano passado", "Δ máx.", "Mín. atual", "Mín. ano passado", "Δ mín."]
+  ["Estado", "País", "Região", "Cidades", "Neve agora", "Δ máx.", "Δ mín.", "Máx. atual", "Máx. ano passado"]
     .forEach(h => head.appendChild(el("th", h)));
   t.appendChild(el("thead")).appendChild(head);
+
   const body = el("tbody");
-  for (const c of rows) {
+  const filtro = RECORTES.find(r => r.id === RECORTE).filter;
+  const visiveis = STATES.filter(filtro);
+
+  const linha = (titulo, sub, cities, chave) => {
+    const st = statsFor(cities);
+    const tr = el("tr");
+    tr.tabIndex = 0;
+    if (ESTADO === chave) tr.className = "sel";
+    tr.appendChild(el("td", titulo));
+    tr.appendChild(el("td", sub.pais));
+    tr.appendChild(el("td", sub.regiao));
+    tr.appendChild(el("td", String(st.n)));
+    const td = el("td");
+    td.appendChild(el("span", st.neve ? `${st.neve} com neve` : "Sem neve", "pill " + (st.neve ? "snow" : "clear")));
+    tr.appendChild(td);
+    tr.appendChild(el("td", arrow(st.dtmax) + signed(st.dtmax), cls(st.dtmax)));
+    tr.appendChild(el("td", arrow(st.dtmin) + signed(st.dtmin), cls(st.dtmin)));
+    tr.appendChild(el("td", num(st.tmaxTY) + " °C"));
+    tr.appendChild(el("td", num(st.tmaxLY) + " °C"));
+    const escolher = () => { ESTADO = (ESTADO === chave) ? null : chave; render(); };
+    tr.addEventListener("click", escolher);
+    tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); escolher(); } });
+    return tr;
+  };
+
+  if (RECORTE === "todos") body.appendChild(linha("América do Norte", { pais: "—", regiao: "—" }, DATA.cidades, null));
+  for (const s of visiveis) {
+    body.appendChild(linha(s.estado, { pais: s.pais, regiao: s.regiao }, s.cidades, s.key));
+  }
+  t.appendChild(body);
+  $("tituloCidades").textContent = ESTADO
+    ? `Cidades em ${STATES.find(s => s.key === ESTADO)?.estado ?? ""}`
+    : "Cidades (escolha um estado acima)";
+}
+
+function renderCidades() {
+  const t = $("cidades");
+  t.replaceChildren();
+  const box = $("paineCidades");
+  if (!ESTADO) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const head = el("tr");
+  ["Cidade", "Região", "Neve agora", "Máx. atual", "Máx. ano passado", "Δ máx.", "Mín. atual", "Mín. ano passado", "Δ mín."]
+    .forEach(h => head.appendChild(el("th", h)));
+  t.appendChild(el("thead")).appendChild(head);
+
+  const body = el("tbody");
+  for (const c of scopeCities()) {
     const tr = el("tr");
     tr.appendChild(el("td", c.nome));
-    tr.appendChild(el("td", c.pais));
     tr.appendChild(el("td", c.regiao));
     const td = el("td");
     if (!c.ok) {
       td.appendChild(el("span", "indisponível", "err"));
+      tr.appendChild(td);
+      for (let i = 0; i < 6; i++) tr.appendChild(el("td", "—"));
     } else {
       td.appendChild(el("span", c.neve ? "Nevando" : "Sem neve", "pill " + (c.neve ? "snow" : "clear")));
-    }
-    tr.appendChild(td);
-    if (!c.ok) {
-      tr.appendChild(el("td", "—"));
-      tr.appendChild(el("td", "—"));
-      tr.appendChild(el("td", "—"));
-      tr.appendChild(el("td", "—"));
-      tr.appendChild(el("td", "—"));
-      tr.appendChild(el("td", "—"));
-    } else {
-      tr.appendChild(el("td", num(c.tmax_atual) + " °C"));
-      tr.appendChild(el("td", num(c.tmax_ano_passado) + " °C"));
-      tr.appendChild(el("td", arrow(c.dmax) + signed(c.dmax), deltaClass(c.dmax)));
-      tr.appendChild(el("td", num(c.tmin_atual) + " °C"));
-      tr.appendChild(el("td", num(c.tmin_ano_passado) + " °C"));
-      tr.appendChild(el("td", arrow(c.dmin) + signed(c.dmin), deltaClass(c.dmin)));
+      tr.appendChild(td);
+      const tmx = statsFor([c]);
+      const tmn = { TY: periodMean([c], "tmin", JANELA.ti, JANELA.n), LY: periodMean([c], "tmin", JANELA.li, JANELA.n) };
+      const dmn = deltaOf(tmn.TY, tmn.LY);
+      tr.appendChild(el("td", num(tmx.tmaxTY) + " °C"));
+      tr.appendChild(el("td", num(tmx.tmaxLY) + " °C"));
+      tr.appendChild(el("td", arrow(tmx.dtmax) + signed(tmx.dtmax), cls(tmx.dtmax)));
+      tr.appendChild(el("td", num(tmn.TY) + " °C"));
+      tr.appendChild(el("td", num(tmn.LY) + " °C"));
+      tr.appendChild(el("td", arrow(dmn) + signed(dmn), cls(dmn)));
     }
     body.appendChild(tr);
   }
   t.appendChild(body);
 }
 
-function renderBars(rows) {
-  const box = $("barras");
+function pathFor(arr, x, y) {
+  let d = "", pen = false;
+  arr.forEach((v, k) => {
+    if (v == null) { pen = false; return; }
+    d += (pen ? "L" : "M") + x(k).toFixed(1) + " " + y(v).toFixed(1) + " ";
+    pen = true;
+  });
+  return d.trim();
+}
+
+function renderGrafico() {
+  const box = $("grafico");
+  const leg = $("legenda");
   box.replaceChildren();
-  const validos = rows.filter(c => c.ok && c.dmax != null)
-    .sort((a, b) => b.dmax - a.dmax);
-  if (!validos.length) {
-    box.appendChild(el("div", "Sem dados para esta seleção.", "empty"));
-    return;
+  leg.replaceChildren();
+  const cities = scopeCities().filter(c => c.ok);
+  const nome = METRICA === "tmax" ? "máxima" : "mínima";
+  $("tituloTendencia").textContent = `Tendência diária da ${nome} · ${ESTADO ? STATES.find(s => s.key === ESTADO)?.estado : "América do Norte"}`;
+
+  const ty = seriesOf(cities, METRICA, JANELA.ti, JANELA.n);
+  const ly = seriesOf(cities, METRICA, JANELA.li, JANELA.n);
+  const vals = [...ty, ...ly].filter(v => v != null);
+  if (!vals.length) { box.appendChild(el("div", "Sem dados para esta seleção.", "empty")); return; }
+
+  const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+  const W = 640, H = 260, L = 44, R = 12, T = 14, B = 28;
+  const n = JANELA.n;
+  const x = k => L + (n <= 1 ? 0 : k / (n - 1)) * (W - L - R);
+  const y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+
+  leg.append(
+    el("span", `Ano atual (${JANELA.rotulo})`),
+    el("span", `Ano passado (${JANELA.rotuloLY})`),
+  );
+  const i1 = leg.children[0], i2 = leg.children[1];
+  i1.prepend(Object.assign(document.createElement("i"), { style: "border-color:var(--accent)" }));
+  i2.prepend(Object.assign(document.createElement("i"), { style: "border-color:var(--muted);border-top-style:dashed" }));
+
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `Gráfico da temperatura ${nome} diária, ano atual e ano passado`);
+
+  const add = (tag, attrs, text) => {
+    const node = document.createElementNS(NS, tag);
+    for (const k in attrs) node.setAttribute(k, attrs[k]);
+    if (text != null) node.textContent = text;
+    svg.appendChild(node);
+    return node;
+  };
+
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + ((hi - lo) * i) / 4;
+    add("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), style: "stroke:var(--line)" });
+    add("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end", style: "fill:var(--muted);font-size:11px" }, Math.round(v) + "°");
   }
-  const max = Math.max(...validos.map(c => Math.abs(c.dmax)), 1);
-  for (const c of validos) {
-    const row = el("div", null, "bar-row");
-    row.appendChild(el("span", c.nome));
-    const track = el("div", null, "track");
-    const bar = el("div", null, "bar");
-    const w = (Math.abs(c.dmax) / max) * 50;
-    bar.style.width = w + "%";
-    bar.style.left = c.dmax < 0 ? (50 - w) + "%" : "50%";
-    bar.style.background = c.dmax >= 0 ? "var(--warm)" : "var(--cold)";
-    track.appendChild(bar);
-    row.appendChild(track);
-    row.appendChild(el("span", signed(c.dmax), "v " + deltaClass(c.dmax)));
-    box.appendChild(row);
-  }
+  const labelIdx = [0, Math.floor((n - 1) / 2), n - 1];
+  labelIdx.forEach(k => {
+    const anchor = k === 0 ? "start" : k === n - 1 ? "end" : "middle";
+    add("text", { x: x(k), y: H - 8, "text-anchor": anchor, style: "fill:var(--muted);font-size:11px" },
+      dm(addDays(JANELA.s, k)));
+  });
+  add("path", { d: pathFor(ly, x, y), fill: "none", style: "stroke:var(--muted);stroke-width:2;stroke-dasharray:5 4" });
+  add("path", { d: pathFor(ty, x, y), fill: "none", style: "stroke:var(--accent);stroke-width:2.5" });
+  box.appendChild(svg);
 }
 
 function render() {
-  renderTabs();
+  renderControls();
   if (!DATA) return;
-  const tab = TABS.find(t => t.id === ATUAL);
-  const rows = DATA.cidades.filter(tab.filter);
-  renderKpis(DATA.grupos[tab.key] || {});
-  renderTable(rows);
-  renderBars(rows);
+  STATES = buildStates(DATA.cidades);
+  if (ESTADO && !STATES.some(s => s.key === ESTADO)) ESTADO = null;
+  renderKpis();
+  renderEstados();
+  renderCidades();
+  renderGrafico();
 }
 
 async function load() {
@@ -235,17 +422,17 @@ async function load() {
     const res = await fetch("data/latest.json", { cache: "no-store" });
     if (!res.ok) throw new Error(res.status);
     DATA = await res.json();
+    JANELA = janela();
     $("meta").textContent =
-      `Atualizado em ${formatDate(DATA.gerado_em)} (horário de Brasília) · ` +
-      `Janela atual: ${DATA.janela.atual[0]} a ${DATA.janela.atual[1]} · ` +
-      `Comparação: ${DATA.janela.ano_passado[0]} a ${DATA.janela.ano_passado[1]}`;
+      `Atualizado em ${formatDate(DATA.gerado_em)} (horário de Brasília) · Último dia completo: ${DATA.ultimo_dia}`;
     render();
   } catch (e) {
     $("meta").textContent = "Ainda não há dados. A primeira coleta roda na próxima hora cheia.";
+    renderControls();
     $("kpis").replaceChildren();
-    $("tabela").replaceChildren();
-    $("barras").replaceChildren(el("div", "Aguardando a primeira atualização.", "empty"));
-    renderTabs();
+    $("estados").replaceChildren();
+    $("grafico").replaceChildren(el("div", "Aguardando a primeira atualização.", "empty"));
+    $("paineCidades").hidden = true;
   }
 }
 
